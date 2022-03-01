@@ -17,10 +17,10 @@ void makeDir()
 	std::cout << "Creating directory '" << dirName << "'..." << std::endl;
 	std::error_code mkDirErrorCode;
 	mkDirErrorCode.clear();
-	bool directoryWasCreated = std::filesystem::create_directory("Cache", mkDirErrorCode);
+	bool directoryWasCreated = std::filesystem::create_directory(dirName, mkDirErrorCode);
 	if (!directoryWasCreated && mkDirErrorCode)
 	{
-		std::cerr << "Error creating temporary directory!" << std::endl;
+		std::cerr << "::error title=Startup::Error creating temporary directory!" << std::endl;
 		exit(2);
 	}
 }
@@ -52,13 +52,15 @@ std::string calcShaOfFile(const std::string filepath)
 
 std::string getShaFromUrl(const std::string urlDownload)
 {
-	std::string saveTo = "Cache\\tmpfile.zip";
+	std::string saveTo = dirName + "\\tmpfile.zip";
 	std::cout << "Downloading '" << urlDownload << "'..." << std::endl;
 	auto result = URLDownloadToFileA(NULL, urlDownload.c_str(), saveTo.c_str(), 0, NULL);
 	if (result != 0)
 	{
-		std::cerr << "Error downloading file!" << std::endl;
-		exit(4);
+		std::cerr << "::error title=Download::Error downloading '" << urlDownload << "'!" << std::endl;
+		//removeDir();
+		//exit(4);
+		return "";
 	}
 
 	std::cout << "Calculating hash of file..." << std::endl;
@@ -71,14 +73,15 @@ std::string getShaFromUrl(const std::string urlDownload)
 
 bool checkShaEntry(const std::string urlDownload, const std::string expectedSha)
 {
-	std::string saveTo = "Cache\\tmpfile.zip";
+	std::string saveTo = dirName + "\\tmpfile.zip";
 	std::cout << "Downloading '" << urlDownload << "'..." << std::endl;
 	auto result = URLDownloadToFileA(NULL, urlDownload.c_str(), saveTo.c_str(), 0, NULL);
 	if (result != 0)
 	{
-		std::cerr << "Error downloading file!" << std::endl;
-		removeDir();
-		exit(4);
+		std::cerr << "::error title=Download::Error downloading '" << urlDownload << "'!" << std::endl;
+		//removeDir();
+		//exit(4);
+		return false;
 	}
 
 	std::cout << "Calculating hash of file..." << std::endl;
@@ -95,7 +98,7 @@ int main(int argc, char* argv[])
 {
 	if (argc < 2)
 	{
-		std::cerr << "ModLinksShaVerifier path_to_xml_file" << std::endl;
+		std::cerr << "::error title=Startup::call like `.\\ModLinksShaVerifier.exe path_to_xml_file`!" << std::endl;
 		exit(1);
 	}
 	makeDir();
@@ -105,7 +108,7 @@ int main(int argc, char* argv[])
 	pugi::xml_parse_result result = doc.load_file(argv[1]);
 	if (result.status != pugi::status_ok)
 	{
-		std::cerr << "Error loading XML file!" << std::endl;
+		std::cerr << "::error title=Startup::Error loading XML file!" << std::endl;
 		removeDir();
 		exit(3);
 	}
@@ -155,9 +158,9 @@ int main(int argc, char* argv[])
 			std::string shaFromEntry = getShaFromUrl(downloadUrl);
 			if (shaFromEntry.compare(expectedSha) != 0)
 			{
-				std::cerr << "SHA256 of '" << reportName << "' does not match with modlinks!" << std::endl;
-				std::cerr << "\tExpected: " << expectedSha << std::endl;
-				std::cerr << "\tReceived: " << shaFromEntry << std::endl;
+				std::cerr << "::error title=Check::Hash mismatch with '" << reportName << "'"
+				          << ". Expected: " << expectedSha
+				          << ", Downloaded: " << shaFromEntry << "!" << std::endl;
 				gotAtLeast1Error = true;
 			}
 		}
