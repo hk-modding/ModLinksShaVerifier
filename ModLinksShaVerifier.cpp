@@ -10,7 +10,28 @@
 #include "pugiXML/pugixml.hpp"
 #pragma comment(lib, "urlmon.lib")
 
-std::string calcShaOfFile(std::string filepath)
+const std::string const dirName = "Cache";
+
+void makeDir()
+{
+	std::cout << "Creating directory '" << dirName << "'..." << std::endl;
+	std::error_code mkDirErrorCode;
+	mkDirErrorCode.clear();
+	bool directoryWasCreated = std::filesystem::create_directory("Cache", mkDirErrorCode);
+	if (!directoryWasCreated && mkDirErrorCode)
+	{
+		std::cerr << "Error creating temporary directory!" << std::endl;
+		exit(2);
+	}
+}
+
+void removeDir()
+{
+	std::cout << "Removing directory '" << dirName << "'" << std::endl;
+	std::filesystem::remove(dirName);
+}
+
+std::string calcShaOfFile(const std::string filepath)
 {
 	// Crypto++ SHA256 object
 	CryptoPP::SHA256 hash;
@@ -29,6 +50,25 @@ std::string calcShaOfFile(std::string filepath)
 	return output;
 }
 
+std::string getShaFromUrl(const std::string urlDownload)
+{
+	std::string saveTo = "Cache\\tmpfile.zip";
+	std::cout << "Downloading '" << urlDownload << "'..." << std::endl;
+	auto result = URLDownloadToFileA(NULL, urlDownload.c_str(), saveTo.c_str(), 0, NULL);
+	if (result != 0)
+	{
+		std::cerr << "Error downloading file!" << std::endl;
+		exit(4);
+	}
+
+	std::cout << "Calculating hash of file..." << std::endl;
+	std::string sha = calcShaOfFile(saveTo);
+
+	std::cout << "Removing temporary file..." << std::endl;
+	std::filesystem::remove(saveTo);
+	return sha;
+}
+
 bool checkShaEntry(const std::string urlDownload, const std::string expectedSha)
 {
 	std::string saveTo = "Cache\\tmpfile.zip";
@@ -37,6 +77,7 @@ bool checkShaEntry(const std::string urlDownload, const std::string expectedSha)
 	if (result != 0)
 	{
 		std::cerr << "Error downloading file!" << std::endl;
+		removeDir();
 		exit(4);
 	}
 
@@ -57,15 +98,7 @@ int main(int argc, char* argv[])
 		std::cerr << "ModLinksShaVerifier path_to_xml_file" << std::endl;
 		exit(1);
 	}
-	std::cout << "Creating directory 'Cache'..." << std::endl;
-	std::error_code mkDirErrorCode;
-	mkDirErrorCode.clear();
-	bool directoryWasCreated = std::filesystem::create_directory("Cache", mkDirErrorCode);
-	if (!directoryWasCreated && mkDirErrorCode)
-	{
-		std::cerr << "Error creating temporary directory!" << std::endl;
-		exit(2);
-	}
+	makeDir();
 
 	pugi::xml_document doc;
 	std::cout << "Loading XML file..." << std::endl;
@@ -73,6 +106,7 @@ int main(int argc, char* argv[])
 	if (result.status != pugi::status_ok)
 	{
 		std::cerr << "Error loading XML file!" << std::endl;
+		removeDir();
 		exit(3);
 	}
 	bool gotAtLeast1Error = false;
@@ -115,11 +149,15 @@ int main(int argc, char* argv[])
 			}
 			std::string downloadUrl(linkNode.text().as_string());
 			std::string expectedSha(linkNode.attribute("SHA256").as_string());
+			std::transform(expectedSha.begin(), expectedSha.end(), expectedSha.begin(), ::tolower);
 			std::cout << "Checking entry '" << reportName << "'..." << std::endl;
-			bool shaCheckResult = checkShaEntry(downloadUrl, expectedSha);
-			if (!shaCheckResult)
+			//bool shaCheckResult = checkShaEntry(downloadUrl, expectedSha);
+			std::string shaFromEntry = getShaFromUrl(downloadUrl);
+			if (shaFromEntry.compare(expectedSha) != 0)
 			{
 				std::cerr << "SHA256 of '" << reportName << "' does not match with modlinks!" << std::endl;
+				std::cerr << "\tExpected: " << expectedSha << std::endl;
+				std::cerr << "\tReceived: " << shaFromEntry << std::endl;
 				gotAtLeast1Error = true;
 			}
 		}
@@ -129,7 +167,6 @@ int main(int argc, char* argv[])
 		std::cout << "No mismatches to report!" << std::endl;
 	}
 
-	std::cout << "Removing directory 'Cache'" << std::endl;
-	std::filesystem::remove("Cache");
+	removeDir();
 	return gotAtLeast1Error ? 5 : 0;
 }
