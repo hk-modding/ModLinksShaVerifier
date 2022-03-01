@@ -1,2 +1,3 @@
 # ModLinksShaVerifier
-The hollow knight modlinks sha verifier
+
+The hollow knight modlinks sha verifier.
