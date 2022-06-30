@@ -1,7 +1,10 @@
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 #include <cryptopp/sha.h>
 #include <cryptopp/hex.h>
@@ -12,22 +15,32 @@
 
 const std::string const dirName = "Cache";
 
+bool AtLeast1Error = false;
+
+std::mutex outputMutex;
+
 void makeDir()
 {
+	outputMutex.lock();
 	std::cout << "Creating directory '" << dirName << "'..." << std::endl;
+	outputMutex.unlock();
 	std::error_code mkDirErrorCode;
 	mkDirErrorCode.clear();
 	bool directoryWasCreated = std::filesystem::create_directory(dirName, mkDirErrorCode);
 	if (!directoryWasCreated && mkDirErrorCode)
 	{
+		outputMutex.lock();
 		std::cerr << "::error title=Startup::Error creating temporary directory!" << std::endl;
+		outputMutex.unlock();
 		exit(2);
 	}
 }
 
 void removeDir()
 {
+	outputMutex.lock();
 	std::cout << "Removing directory '" << dirName << "'" << std::endl;
+	outputMutex.unlock();
 	std::filesystem::remove(dirName);
 }
 
@@ -50,70 +63,86 @@ std::string calcShaOfFile(const std::string filepath)
 	return output;
 }
 
-std::string getShaFromUrl(const std::string urlDownload)
+std::string getShaFromUrl(const std::string modName, const std::string urlDownload)
 {
-	std::string saveTo = dirName + "\\tmpfile.zip";
-	std::cout << "Downloading '" << urlDownload << "'..." << std::endl;
+	std::string saveTo = dirName + "\\" + modName + ".zip";
+	outputMutex.lock();
+	std::cout << "Downloading '" << modName << "' '" << urlDownload << "'..." << std::endl;
+	outputMutex.unlock();
 	auto result = URLDownloadToFileA(NULL, urlDownload.c_str(), saveTo.c_str(), 0, NULL);
 	if (result != 0)
 	{
-		std::cerr << "::error title=Download::Error downloading '" << urlDownload << "'!" << std::endl;
-		//removeDir();
-		//exit(4);
+		outputMutex.lock();
+		std::cerr << "::error title=Download::Error downloading '" << modName << "' '" << urlDownload << "'!" << std::endl;
+		outputMutex.unlock();
 		return "";
 	}
 
-	std::cout << "Calculating hash of file..." << std::endl;
+	outputMutex.lock();
+	std::cout << "Calculating hash of file for '" << modName << "'..." << std::endl;
+	outputMutex.unlock();
 	std::string sha = calcShaOfFile(saveTo);
 
-	std::cout << "Removing temporary file..." << std::endl;
+	outputMutex.lock();
+	std::cout << "Removing temporary file for '" << modName << "'..." << std::endl;
+	outputMutex.unlock();
 	std::filesystem::remove(saveTo);
 	return sha;
 }
 
-bool checkShaEntry(const std::string urlDownload, const std::string expectedSha)
+void checkShaEntry(const std::string modName, const std::string urlDownload, const std::string expectedSha)
 {
-	std::string saveTo = dirName + "\\tmpfile.zip";
-	std::cout << "Downloading '" << urlDownload << "'..." << std::endl;
-	auto result = URLDownloadToFileA(NULL, urlDownload.c_str(), saveTo.c_str(), 0, NULL);
-	if (result != 0)
-	{
-		std::cerr << "::error title=Download::Error downloading '" << urlDownload << "'!" << std::endl;
-		//removeDir();
-		//exit(4);
-		return false;
-	}
+	outputMutex.lock();
+	std::cout << "Checking entry '" << modName << "'..." << std::endl;
+	outputMutex.unlock();
 
-	std::cout << "Calculating hash of file..." << std::endl;
-	std::string sha = calcShaOfFile(saveTo);
+	std::string sha = getShaFromUrl(modName, urlDownload);
 	std::string expectedShaLower = expectedSha;
 	std::transform(expectedShaLower.begin(), expectedShaLower.end(), expectedShaLower.begin(), ::tolower);
 
-	std::cout << "Removing temporary file..." << std::endl;
-	std::filesystem::remove(saveTo);
-	return sha.compare(expectedShaLower) == 0;
+	bool compareResult = sha.compare(expectedShaLower) == 0;
+	if (!compareResult)
+	{
+		outputMutex.lock();
+		std::cerr << "::error title=Check::Hash mismatch with '" << modName << "'"
+			<< ". Expected: " << expectedShaLower
+			<< ", Downloaded: " << sha << "!" << std::endl;
+		outputMutex.unlock();
+		AtLeast1Error = true;
+	}
+
 }
 
 int main(int argc, char* argv[])
 {
+	std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
 	if (argc < 2)
 	{
+		outputMutex.lock();
 		std::cerr << "::error title=Startup::call like `.\\ModLinksShaVerifier.exe path_to_xml_file`!" << std::endl;
+		outputMutex.unlock();
 		exit(1);
 	}
 	makeDir();
 
 	pugi::xml_document doc;
+	outputMutex.lock();
 	std::cout << "Loading XML file..." << std::endl;
+	outputMutex.unlock();
 	pugi::xml_parse_result result = doc.load_file(argv[1]);
 	if (result.status != pugi::status_ok)
 	{
+		outputMutex.lock();
 		std::cerr << "::error title=Startup::Error loading XML file!" << std::endl;
+		outputMutex.unlock();
 		removeDir();
 		exit(3);
 	}
-	bool gotAtLeast1Error = false;
+	std::vector<std::thread> threads;
 	pugi::xml_node rootNode = doc.first_child();
+	outputMutex.lock();
+	std::cout << "Starting the checks..." << std::endl;
+	outputMutex.unlock();
 	for (pugi::xml_node manifestNode : rootNode)
 	{
 		std::string manifestName;
@@ -153,23 +182,24 @@ int main(int argc, char* argv[])
 			std::string downloadUrl(linkNode.text().as_string());
 			std::string expectedSha(linkNode.attribute("SHA256").as_string());
 			std::transform(expectedSha.begin(), expectedSha.end(), expectedSha.begin(), ::tolower);
-			std::cout << "Checking entry '" << reportName << "'..." << std::endl;
-			//bool shaCheckResult = checkShaEntry(downloadUrl, expectedSha);
-			std::string shaFromEntry = getShaFromUrl(downloadUrl);
-			if (shaFromEntry.compare(expectedSha) != 0)
-			{
-				std::cerr << "::error title=Check::Hash mismatch with '" << reportName << "'"
-				          << ". Expected: " << expectedSha
-				          << ", Downloaded: " << shaFromEntry << "!" << std::endl;
-				gotAtLeast1Error = true;
-			}
+			threads.push_back(std::thread(checkShaEntry, reportName, downloadUrl, expectedSha));
 		}
 	}
-	if (!gotAtLeast1Error)
+	for (int i = 0; i < threads.size(); i++)
 	{
+		threads[i].join();
+	}
+	if (!AtLeast1Error)
+	{
+		outputMutex.lock();
 		std::cout << "No mismatches to report!" << std::endl;
+		outputMutex.unlock();
 	}
 
 	removeDir();
-	return gotAtLeast1Error ? 5 : 0;
+	std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
+	outputMutex.lock();
+	std::cout << "The entire operation took " << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << " seconds!" << std::endl;
+	outputMutex.unlock();
+	return 0;
 }
