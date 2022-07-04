@@ -2,180 +2,104 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Net;
+using System.Linq;
 using System.Net.Http;
-using System.Threading;
 using System.Xml;
 using System.Security.Cryptography;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Xml.Serialization;
 
 namespace ModlinksShaVerifier
 {
-    internal class ManifestData
+    internal static class Program
     {
-        public string Name = "";
-        public string Sha256 = "";
-        public string Url = "";
-    }
+        private static readonly HttpClient _Client = new();
 
-    internal class Program
-    {
-        private static bool _atLeast1Error = false;
+        private static string ShaToString(byte[] hash) 
+            => BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
 
-        private static string GetShaOfBytes(ref byte[] data)
+        private static async Task<bool> CheckSingleSha(Manifest m)
         {
-            SHA256 sha = SHA256.Create();
-            return BitConverter.ToString(sha.ComputeHash(data)).Replace("-", "").ToLower();
+            using var sha = SHA256.Create();
+
+            Console.WriteLine($"Checking '{m.Name}'");
+
+            foreach (var link in m.Links.AsEnumerable())
+            {
+                Stream stream;
+
+                try
+                {
+                    stream = await _Client.GetStreamAsync(link.URL);
+                }
+                catch (HttpRequestException e)
+                {
+                    WriteError("Check", $"Request failed for {m.Name} - {link.URL}! {e.StatusCode}");
+                    return false;
+                }
+                
+                string shasum = ShaToString(await sha.ComputeHashAsync(stream));
+
+                if (shasum == link.SHA256.ToLowerInvariant()) 
+                    continue;
+                
+                WriteError("Check", $"Hash mismatch of {m.Name} in link {link.URL}. Expected: {link.SHA256}, got {shasum}");
+                
+                return false;
+            }
+            
+            return true;
         }
         
-        private static void CheckSingleSha(object? data)
+        internal static async Task<int> Main(string[] args)
         {
-            ManifestData actualData = (data as ManifestData)!;
-            print($"Checking '{actualData.Name}'");
-
-            string downloadedSha;
-            using (var client = new WebClient())
-            {
-                byte[] downloadBytes = client.DownloadData(actualData.Url);
-                downloadedSha = GetShaOfBytes(ref downloadBytes);
-            }
-
-            if (downloadedSha != actualData.Sha256)
-            {
-                printError("Check", $"Hash mismatch with '{actualData.Name}'. Expected: {actualData.Sha256}, Downloaded: {downloadedSha}!");
-                _atLeast1Error = true;
-            }
-            else
-            {
-                print($"Hash of '{actualData.Name}' matches!");
-            }
-        }
-        
-        internal static int Main(string[] args)
-        {
-            #region Start stopwatch
-
-            Stopwatch stopWatch = new Stopwatch();
-            stopWatch.Start();
-
-            #endregion
-
-            #region Check argument
-
+            var sw = new Stopwatch();
+            sw.Start();
+            
             if (args.Length != 1)
             {
-                printError("Startup", "call like `.\\ModLinksShaVerifier.exe path_to_xml_file`!");
-                return 1;
-            }
-            if (!File.Exists(Path.GetFullPath(args[0])))
-            {
-                printError("Startup", "call like `.\\ModLinksShaVerifier.exe path_to_xml_file`!");
+                await Console.Error.WriteLineAsync("Usage: ModlinksShaVerifier [FILE]");
                 return 1;
             }
 
-            #endregion
+            var path = args[0];
 
-            #region Load XML file
-
-            XmlDocument xmlDoc = new XmlDocument();
-            xmlDoc.Load(Path.GetFullPath(args[0]));
-            XmlNamespaceManager xmlNsMgr = new XmlNamespaceManager(xmlDoc.NameTable);
-            xmlNsMgr.AddNamespace("mm", "https://github.com/HollowKnight-Modding/HollowKnight.ModLinks/HollowKnight.ModManager");
-
-            #endregion
-
-            #region Test type of XML file
-
-            bool isModLinks = xmlDoc.DocumentElement!.SelectNodes("/mm:ModLinks", xmlNsMgr)!.Count > 0;
-            bool isApiLinks = xmlDoc.DocumentElement.SelectNodes("/mm:ApiLinks", xmlNsMgr)!.Count > 0;
-
-            #endregion
-
-            #region Traverse XML file
-
-            List<ManifestData> dataToCheck = new List<ManifestData>();
-            Dictionary<string, string> linksAndNameSuffixes = new Dictionary<string, string>()
+            if (!File.Exists(path))
             {
-                { "mm:Link", "" },
-                { "mm:Linux", " (Linux)" },
-                { "mm:Mac", " (Mac)" },
-                { "mm:Windows", " (Windows)" },
-            };
-            foreach (XmlNode manifestNode in xmlDoc.SelectNodes("/mm:ModLinks/mm:Manifest", xmlNsMgr)!)
-            {
-                foreach (var pathNamePair in linksAndNameSuffixes)
-                {
-                    if (manifestNode.SelectSingleNode(pathNamePair.Key, xmlNsMgr) != null)
-                    {
-                        XmlNode? linkNode = manifestNode.SelectSingleNode(pathNamePair.Key, xmlNsMgr);
-                        ManifestData data = new ManifestData();
-                        data.Name = manifestNode.SelectSingleNode("mm:Name", xmlNsMgr)!.InnerText + pathNamePair.Value;
-                        data.Sha256 = linkNode!.Attributes!["SHA256"]!.InnerText.ToLower();
-                        data.Url = linkNode.InnerText;
-                        dataToCheck.Add(data);
-                    }
-                }
-            }
-            foreach (XmlNode manifestNode in xmlDoc.SelectNodes("/mm:ApiLinks/mm:Manifest", xmlNsMgr)!)
-            {
-                foreach (var pathNamePair in linksAndNameSuffixes)
-                {
-                    if (manifestNode.SelectSingleNode(pathNamePair.Key, xmlNsMgr) != null)
-                    {
-                        XmlNode? linkNode = manifestNode.SelectSingleNode(pathNamePair.Key, xmlNsMgr);
-                        ManifestData data = new ManifestData();
-                        data.Name = "Modding API" + pathNamePair.Value;
-                        data.Sha256 = linkNode!.Attributes!["SHA256"]!.InnerText.ToLower();
-                        data.Url = linkNode.InnerText;
-                        dataToCheck.Add(data);
-                    }
-                }
+                await Console.Error.WriteLineAsync($"Unable to access {path}! Does it exist?");
+                return 1;
             }
 
-            #endregion
+            var reader = XmlReader.Create(path, new XmlReaderSettings { Async = true });
+            
+            var serializer = new XmlSerializer(typeof(Manifest));
 
-            #region Check SHA of downloads
+            List<Task<bool>> checks = new();
 
-            List<Thread> threads = new List<Thread>();
-            for (int i = 0; i < dataToCheck.Count; i++)
+            while (await reader.ReadAsync())
             {
-                threads.Add(new Thread(CheckSingleSha));
-            }
-            for (int i = 0; i < dataToCheck.Count; i++)
-            {
-                threads[i].Start(dataToCheck[i]);
-            }
-            foreach (Thread thread in threads)
-            {
-                thread.Join();
-            }
-
-            #endregion
-
-            #region Last print
-
-            if (!_atLeast1Error)
-            {
-                print("No mismatches to report!");
+                if (reader.NodeType != XmlNodeType.Element)
+                    continue;
+                
+                if (reader.Name != "Manifest")
+                    continue;
+                
+                var manifest = (Manifest?) serializer.Deserialize(reader) ?? throw new InvalidDataException();
+                
+                checks.Add(CheckSingleSha(manifest));
             }
 
-            #endregion
+            var res = await Task.WhenAll(checks);
+            
+            sw.Stop();
+            
+            Console.WriteLine($"Completed in {sw.ElapsedMilliseconds}ms.");
 
-            #region Stop stopwatch
-
-            stopWatch.Stop();
-            print($"The entire operation took {stopWatch.Elapsed.TotalSeconds} seconds!");
-
-            #endregion
-            return _atLeast1Error ? 1 : 0;
+            // If they're not all correct, error.
+            return !res.All(x => x) ? 1 : 0;
         }
 
-        static void printError(string title, string message)
-        {
-            Console.WriteLine($"::error title={title}::{message}");
-        }
-        static void print(string message)
-        {
-            Console.WriteLine(message);
-        }
+        private static void WriteError(string title, string message) => Console.WriteLine($"::error title={title}::{message}");
     }
 }
