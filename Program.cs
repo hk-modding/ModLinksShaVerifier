@@ -39,7 +39,7 @@ namespace ModlinksShaVerifier
             if (shasum == link.SHA256.ToLowerInvariant())
                 return true;
 
-            WriteError("Check", $"Hash mismatch of {m.Name} in link {link.URL}. Expected: {link.SHA256}, got {shasum}");
+            WriteError("Check", $"Hash mismatch of {m.Name} in link {link.URL}. Expected value from modlinks: {link.SHA256}, Actual value: {shasum}");
 
             return false;
         }
