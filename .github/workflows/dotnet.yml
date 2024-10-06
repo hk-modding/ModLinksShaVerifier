@@ -6,9 +6,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Setup .NET
-      uses: actions/setup-dotnet@v1
+      uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 6.0.x
     - name: Restore dependencies
@@ -18,7 +18,7 @@ jobs:
         dotnet publish -r linux-x64 -p:PublishSingleFile=true -p:Configuration=Release --no-self-contained
         cd ..
     - name: Upload Binary
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: linux
         path: bin/Release/net6.0/linux-x64/publish/
@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with: 
           path: ./artifacts
 
@@ -41,7 +41,7 @@ jobs:
             zip -jr linux.zip ./artifacts/linux/*
 
       - name: Create release if a new tag is pushed
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             ./linux.zip
