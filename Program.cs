@@ -81,8 +81,6 @@ namespace ModlinksShaVerifier
             string compareCommitUrl = $"{RawGithubUrl}/{compareSha}/{fileName}";
             
             string compareContents = await _Client.GetStringAsync(compareCommitUrl);
-            
-            await Console.Out.WriteLineAsync($"Compare contents: " + compareContents);
 
             var compareDocument = new XmlDocument();
             compareDocument.LoadXml(compareContents);
@@ -97,8 +95,6 @@ namespace ModlinksShaVerifier
             var reader  = XmlReader.Create(path, new XmlReaderSettings {Async = true});
 
             var compareManifests = modLinksNode.ChildNodes;
-            
-            await Console.Out.WriteLineAsync($"Manifests: " + compareManifests.Count);
 
             var serializer = new XmlSerializer(typeof(Manifest));
 
