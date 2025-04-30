@@ -13,6 +13,8 @@ namespace ModlinksShaVerifier
 {
     internal static class Program
     {
+        private const string RawGithubUrl = "https://github.com/hk-modding/modlinks/raw";
+        
         private static readonly HttpClient _Client = new();
 
         private static string ShaToString(byte[] hash)
@@ -58,21 +60,38 @@ namespace ModlinksShaVerifier
             var sw = new Stopwatch();
             sw.Start();
 
-            if (args.Length != 1)
+            if (args.Length != 2)
             {
-                await Console.Error.WriteLineAsync("Usage: ModlinksShaVerifier [FILE]");
+                await Console.Error.WriteLineAsync("Usage: ModlinksShaVerifier [FILE] [COMPARE_SHA]");
                 return 1;
             }
 
-            var path = args[0];
+            string path = args[0];
+            var fileName = Path.GetFileName(path);
+            
+            string compareSha = args[1];
 
-            if (!File.Exists(path))
+            string compareCommitUrl = $"{RawGithubUrl}/{compareSha}/{fileName}";
+            
+            string compareContents = await _Client.GetStringAsync(compareCommitUrl);
+            
+            await Console.Out.WriteLineAsync($"Compare contents: " + compareContents);
+
+            var compareDocument = new XmlDocument();
+            compareDocument.LoadXml(compareContents);
+            var modLinksNode = compareDocument.DocumentElement;
+
+            if (modLinksNode == null)
             {
-                await Console.Error.WriteLineAsync($"Unable to access {path}! Does it exist?");
+                await Console.Error.WriteLineAsync("ModLinks XML node could not be found!");
                 return 1;
             }
+            
+            var reader  = XmlReader.Create(path, new XmlReaderSettings {Async = true});
 
-            var reader = XmlReader.Create(path, new XmlReaderSettings {Async = true});
+            var compareManifests = modLinksNode.ChildNodes;
+            
+            await Console.Out.WriteLineAsync($"Manifests: " + compareManifests.Count);
 
             var serializer = new XmlSerializer(typeof(Manifest));
 
@@ -87,6 +106,27 @@ namespace ModlinksShaVerifier
                     continue;
 
                 var manifest = (Manifest?) serializer.Deserialize(reader) ?? throw new InvalidDataException();
+
+                bool matching = false;
+                for (int i = 0; i < compareManifests.Count; i++)
+                {
+                    var xmlNode = compareManifests[i] ?? throw new InvalidDataException();
+                    var compareManifestStr = xmlNode.OuterXml;
+
+                    var manifestStr = await reader.ReadOuterXmlAsync();
+
+                    if (compareManifestStr == manifestStr)
+                    {
+                        matching = true;
+                        break;
+                    }
+                }
+
+                if (matching)
+                {
+                    await Console.Out.WriteLineAsync($"Remote and local manifests of mod \"{manifest.Name}\" are matching!");
+                    continue;
+                }
 
                 checks.Add(CheckSingleSha(manifest));
             }
