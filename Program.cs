@@ -67,6 +67,13 @@ namespace ModlinksShaVerifier
             }
 
             string path = args[0];
+            
+            if (!File.Exists(path))
+            {
+                await Console.Error.WriteLineAsync($"Unable to access {path}! Does it exist?");
+                return 1;
+            }
+            
             var fileName = Path.GetFileName(path);
             
             string compareSha = args[1];
