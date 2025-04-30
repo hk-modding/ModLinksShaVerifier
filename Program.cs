@@ -92,7 +92,7 @@ namespace ModlinksShaVerifier
                 return 1;
             }
             
-            var reader  = XmlReader.Create(path, new XmlReaderSettings {Async = true});
+            var reader = XmlReader.Create(path, new XmlReaderSettings {Async = true});
 
             var compareManifests = modLinksNode.ChildNodes;
 
@@ -114,11 +114,21 @@ namespace ModlinksShaVerifier
                 for (int i = 0; i < compareManifests.Count; i++)
                 {
                     var xmlNode = compareManifests[i] ?? throw new InvalidDataException();
-                    var compareManifestStr = xmlNode.OuterXml;
+                    var stream = new MemoryStream();
+                    var writer = new StreamWriter(stream);
+                    await writer.WriteAsync(xmlNode.OuterXml);
+                    await writer.FlushAsync();
 
-                    var manifestStr = await reader.ReadOuterXmlAsync();
-
-                    if (compareManifestStr == manifestStr)
+                    stream.Position = 0;
+                    
+                    var compareManifest = (Manifest?) serializer.Deserialize(stream) ?? throw new InvalidDataException();
+                    
+                    if (compareManifest.Name != manifest.Name) continue;
+                    
+                    if (compareManifest.Name == manifest.Name &&
+                        compareManifest.Description == manifest.Description &&
+                        compareManifest.Dependencies == null && manifest.Dependencies == null || compareManifest.Dependencies != null && compareManifest.Dependencies.SequenceEqual(manifest.Dependencies) &&
+                        compareManifest.Links.Equals(manifest.Links))
                     {
                         matching = true;
                         break;
@@ -126,10 +136,7 @@ namespace ModlinksShaVerifier
                 }
 
                 if (matching)
-                {
-                    await Console.Out.WriteLineAsync($"Remote and local manifests of mod \"{manifest.Name}\" are matching!");
                     continue;
-                }
 
                 checks.Add(CheckSingleSha(manifest));
             }
