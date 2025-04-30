@@ -13,7 +13,10 @@ namespace ModlinksShaVerifier
 {
     internal static class Program
     {
-        private static readonly HttpClient _Client = new();
+        private static readonly HttpClient _Client = new()
+        {
+            Timeout = TimeSpan.FromMinutes(30)
+        };
 
         private static string ShaToString(byte[] hash)
             => BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
@@ -75,7 +78,7 @@ namespace ModlinksShaVerifier
             var reader = XmlReader.Create(path, new XmlReaderSettings {Async = true});
 
             var serializer = new XmlSerializer(typeof(Manifest));
-
+            
             List<Task<bool>> checks = new();
 
             while (await reader.ReadAsync())
