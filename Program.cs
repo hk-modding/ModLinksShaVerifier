@@ -13,8 +13,6 @@ namespace ModlinksShaVerifier
 {
     internal static class Program
     {
-        private const string RawGithubUrl = "https://github.com/hk-modding/modlinks/raw";
-        
         private static readonly HttpClient _Client = new();
 
         private static string ShaToString(byte[] hash)
@@ -62,58 +60,59 @@ namespace ModlinksShaVerifier
 
             if (args.Length != 2)
             {
-                await Console.Error.WriteLineAsync("Usage: ModlinksShaVerifier [FILE] [COMPARE_SHA]");
+                await Console.Error.WriteLineAsync("Usage: ModlinksShaVerifier [CURRENT_FILE] [INCOMING_FILE]");
                 return 1;
             }
 
-            string path = args[0];
+            string currentPath = args[0];
             
-            if (!File.Exists(path))
+            if (!File.Exists(currentPath))
             {
-                await Console.Error.WriteLineAsync($"Unable to access {path}! Does it exist?");
+                await Console.Error.WriteLineAsync($"Unable to access current XML file {currentPath}! Does it exist?");
+                return 1;
+            }
+
+            var incomingPath = args[1];
+            
+            if (!File.Exists(incomingPath))
+            {
+                await Console.Error.WriteLineAsync($"Unable to access incoming XML file {incomingPath}! Does it exist?");
                 return 1;
             }
             
-            var fileName = Path.GetFileName(path);
-            
-            string compareSha = args[1];
-
-            string compareCommitUrl = $"{RawGithubUrl}/{compareSha}/{fileName}";
-            
-            string compareContents = await _Client.GetStringAsync(compareCommitUrl);
-
-            var compareDocument = new XmlDocument();
-            compareDocument.LoadXml(compareContents);
-            var modLinksNode = compareDocument.DocumentElement;
+            string currentContents = await File.ReadAllTextAsync(currentPath);
+            var currentDocument = new XmlDocument();
+            currentDocument.LoadXml(currentContents);
+            var modLinksNode = currentDocument.DocumentElement;
 
             if (modLinksNode == null)
             {
-                await Console.Error.WriteLineAsync("ModLinks XML node could not be found!");
+                await Console.Error.WriteLineAsync("Could not get document element of current XML file!");
                 return 1;
             }
-            
-            var reader = XmlReader.Create(path, new XmlReaderSettings {Async = true});
 
-            var compareManifests = modLinksNode.ChildNodes;
+            var currentManifests = modLinksNode.ChildNodes;
+            
+            var incomingReader = XmlReader.Create(incomingPath, new XmlReaderSettings {Async = true});
 
             var serializer = new XmlSerializer(typeof(Manifest));
 
             List<Task<bool>> checks = new();
 
-            while (await reader.ReadAsync())
+            while (await incomingReader.ReadAsync())
             {
-                if (reader.NodeType != XmlNodeType.Element)
+                if (incomingReader.NodeType != XmlNodeType.Element)
                     continue;
 
-                if (reader.Name != "Manifest")
+                if (incomingReader.Name != "Manifest")
                     continue;
 
-                var manifest = (Manifest?) serializer.Deserialize(reader) ?? throw new InvalidDataException();
+                var incomingManifest = (Manifest?) serializer.Deserialize(incomingReader) ?? throw new InvalidDataException();
 
                 bool matching = false;
-                for (int i = 0; i < compareManifests.Count; i++)
+                for (int i = 0; i < currentManifests.Count; i++)
                 {
-                    var xmlNode = compareManifests[i] ?? throw new InvalidDataException();
+                    var xmlNode = currentManifests[i] ?? throw new InvalidDataException();
                     var stream = new MemoryStream();
                     var writer = new StreamWriter(stream);
                     await writer.WriteAsync(xmlNode.OuterXml);
@@ -121,14 +120,12 @@ namespace ModlinksShaVerifier
 
                     stream.Position = 0;
                     
-                    var compareManifest = (Manifest?) serializer.Deserialize(stream) ?? throw new InvalidDataException();
+                    var currentManifest = (Manifest?) serializer.Deserialize(stream) ?? throw new InvalidDataException();
                     
-                    if (compareManifest.Name != manifest.Name) continue;
-                    
-                    if (compareManifest.Name == manifest.Name &&
-                        compareManifest.Description == manifest.Description &&
-                        compareManifest.Dependencies == null && manifest.Dependencies == null || compareManifest.Dependencies != null && compareManifest.Dependencies.SequenceEqual(manifest.Dependencies) &&
-                        compareManifest.Links.Equals(manifest.Links))
+                    if (currentManifest.Name == incomingManifest.Name &&
+                        currentManifest.Description == incomingManifest.Description &&
+                        currentManifest.Dependencies == null && incomingManifest.Dependencies == null || currentManifest.Dependencies != null && currentManifest.Dependencies.SequenceEqual(incomingManifest.Dependencies) &&
+                        currentManifest.Links.Equals(incomingManifest.Links))
                     {
                         matching = true;
                         break;
@@ -138,7 +135,7 @@ namespace ModlinksShaVerifier
                 if (matching)
                     continue;
 
-                checks.Add(CheckSingleSha(manifest));
+                checks.Add(CheckSingleSha(incomingManifest));
             }
 
             var res = await Task.WhenAll(checks);
