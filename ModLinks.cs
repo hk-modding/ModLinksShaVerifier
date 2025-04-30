@@ -1,10 +1,7 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Xml;
-using System.Xml.Schema;
 using System.Xml.Serialization;
 
 namespace ModlinksShaVerifier;
@@ -58,7 +55,7 @@ public record Manifest
     }
 }
 
-public class Links
+public class Links : IEquatable<Links>
 {
     public Link? Windows;
     public Link? Mac;
@@ -82,9 +79,17 @@ public class Links
         if (Linux is not null)
             yield return Linux;
     }
+
+    public bool Equals(Links? other)
+    {
+        if (other is null) return false;
+        return ((Windows == null && other.Windows == null) || (Windows != null && Windows.Equals(other.Windows))) && 
+            ((Mac == null && other.Mac == null) || (Mac != null && Mac.Equals(other.Mac))) && 
+            ((Linux == null && other.Linux == null) || (Linux != null && Linux.Equals(other.Linux)));
+    }
 }
 
-public class Link
+public class Link : IEquatable<Link>
 {
     [XmlAttribute]
     public string SHA256 = null!;
@@ -95,6 +100,12 @@ public class Link
     public override string ToString()
     {
         return $"[Link: {nameof(SHA256)} = {SHA256}, {nameof(URL)}: {URL}]";
+    }
+
+    public bool Equals(Link? other)
+    {
+        if (other is null) return false;
+        return SHA256 == other.SHA256 && URL == other.URL.Trim();
     }
 }
 
