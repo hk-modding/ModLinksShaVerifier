@@ -93,7 +93,7 @@ public record Link
     public string SHA256 = null!;
 
     [XmlText]
-    public  string URL = null!;
+    public string URL = null!;
 
     public override string ToString()
     {
