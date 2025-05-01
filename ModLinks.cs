@@ -53,9 +53,15 @@ public record Manifest
                + $"\t{nameof(Description)}: {Description}\n"
                + "}";
     }
+
+    public override int GetHashCode()
+    {
+        var hashCode = HashCode.Combine(Name, Description, Links);
+        return Dependencies?.Aggregate(hashCode, HashCode.Combine) ?? hashCode;
+    }
 }
 
-public class Links : IEquatable<Links>
+public record Links
 {
     public Link? Windows;
     public Link? Mac;
@@ -69,7 +75,7 @@ public class Links : IEquatable<Links>
                + $"\t{nameof(Linux)} = {Linux}\n"
                + "}";
     }
-    
+
     public IEnumerable<Link> AsEnumerable()
     {
         if (Windows is not null)
@@ -79,33 +85,19 @@ public class Links : IEquatable<Links>
         if (Linux is not null)
             yield return Linux;
     }
-
-    public bool Equals(Links? other)
-    {
-        if (other is null) return false;
-        return ((Windows == null && other.Windows == null) || (Windows != null && Windows.Equals(other.Windows))) && 
-            ((Mac == null && other.Mac == null) || (Mac != null && Mac.Equals(other.Mac))) && 
-            ((Linux == null && other.Linux == null) || (Linux != null && Linux.Equals(other.Linux)));
-    }
 }
 
-public class Link : IEquatable<Link>
+public record Link
 {
     [XmlAttribute]
     public string SHA256 = null!;
 
     [XmlText]
-    public string URL = null!;
+    public  string URL = null!;
 
     public override string ToString()
     {
         return $"[Link: {nameof(SHA256)} = {SHA256}, {nameof(URL)}: {URL}]";
-    }
-
-    public bool Equals(Link? other)
-    {
-        if (other is null) return false;
-        return SHA256 == other.SHA256 && URL == other.URL.Trim();
     }
 }
 

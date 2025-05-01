@@ -65,7 +65,7 @@ namespace ModlinksShaVerifier
             }
 
             string currentPath = args[0];
-            
+
             if (!File.Exists(currentPath))
             {
                 await Console.Error.WriteLineAsync($"Unable to access current XML file {currentPath}! Does it exist?");
@@ -73,32 +73,36 @@ namespace ModlinksShaVerifier
             }
 
             var incomingPath = args[1];
-            
+
             if (!File.Exists(incomingPath))
             {
-                await Console.Error.WriteLineAsync($"Unable to access incoming XML file {incomingPath}! Does it exist?");
+                await Console.Error.WriteLineAsync(
+                    $"Unable to access incoming XML file {incomingPath}! Does it exist?");
                 return 1;
             }
             
-            string currentContents = await File.ReadAllTextAsync(currentPath);
-            var currentDocument = new XmlDocument();
-            currentDocument.LoadXml(currentContents);
-            var modLinksNode = currentDocument.DocumentElement;
-
-            if (modLinksNode == null)
-            {
-                await Console.Error.WriteLineAsync("Could not get document element of current XML file!");
-                return 1;
-            }
-
-            var currentManifests = modLinksNode.ChildNodes;
+            var currentReader = XmlReader.Create(currentPath, new XmlReaderSettings { Async = true });
+            var incomingReader = XmlReader.Create(incomingPath, new XmlReaderSettings { Async = true });
             
-            var incomingReader = XmlReader.Create(incomingPath, new XmlReaderSettings {Async = true});
-
             var serializer = new XmlSerializer(typeof(Manifest));
 
-            List<Task<bool>> checks = new();
+            HashSet<Manifest> currentManifests = new();
+            
+            while (await currentReader.ReadAsync())
+            {
+                if (currentReader.NodeType != XmlNodeType.Element)
+                    continue;
 
+                if (currentReader.Name != "Manifest")
+                    continue;
+
+                var currentManifest = (Manifest?)serializer.Deserialize(currentReader) ?? throw new InvalidDataException();
+
+                currentManifests.Add(currentManifest);
+            }
+            
+            List<Task<bool>> checks = new();
+            
             while (await incomingReader.ReadAsync())
             {
                 if (incomingReader.NodeType != XmlNodeType.Element)
@@ -107,37 +111,11 @@ namespace ModlinksShaVerifier
                 if (incomingReader.Name != "Manifest")
                     continue;
 
-                var incomingManifest = (Manifest?) serializer.Deserialize(incomingReader) ?? throw new InvalidDataException();
-
-                bool matching = false;
-                for (int i = 0; i < currentManifests.Count; i++)
-                {
-                    var xmlNode = currentManifests[i] ?? throw new InvalidDataException();
-                    var stream = new MemoryStream();
-                    var writer = new StreamWriter(stream);
-                    await writer.WriteAsync(xmlNode.OuterXml);
-                    await writer.FlushAsync();
-
-                    stream.Position = 0;
-                    
-                    var currentManifest = (Manifest?) serializer.Deserialize(stream) ?? throw new InvalidDataException();
-                    
-                    if (currentManifest.Name == incomingManifest.Name &&
-                        currentManifest.Description == incomingManifest.Description &&
-                        currentManifest.Dependencies == null && incomingManifest.Dependencies == null || currentManifest.Dependencies != null && currentManifest.Dependencies.SequenceEqual(incomingManifest.Dependencies) &&
-                        currentManifest.Links.Equals(incomingManifest.Links))
-                    {
-                        matching = true;
-                        break;
-                    }
-                }
-
-                if (matching)
-                    continue;
-
-                checks.Add(CheckSingleSha(incomingManifest));
-            }
-
+                var incomingManifest = (Manifest?)serializer.Deserialize(incomingReader) ?? throw new InvalidDataException();
+                if (currentManifests.All(m => m.GetHashCode() != incomingManifest.GetHashCode()))
+                    checks.Add(CheckSingleSha(incomingManifest));
+            }   
+            
             var res = await Task.WhenAll(checks);
 
             sw.Stop();
