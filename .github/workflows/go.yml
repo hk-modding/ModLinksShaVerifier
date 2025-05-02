@@ -1,4 +1,4 @@
-name: .NET
+name: Build Golang
 
 on: [push, pull_request]
 
@@ -7,21 +7,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.x
-    - name: Restore dependencies
-      run: dotnet restore -r linux-x64
+    - name: Setup Go
+      uses: actions/setup-go@v5
     - name: Build
-      run: | 
-        dotnet publish -r linux-x64 -p:PublishSingleFile=true -p:Configuration=Release --self-contained true
-        cd ..
+      run: go build
     - name: Upload Binary
       uses: actions/upload-artifact@v4
       with:
         name: linux
-        path: bin/Release/net8.0/linux-x64/publish/
+        path: ModlinksShaVerifier
 
   release:
     needs: [build]
