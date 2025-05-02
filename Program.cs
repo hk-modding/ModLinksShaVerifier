@@ -53,6 +53,14 @@ namespace ModlinksShaVerifier
             return res.All(x => x);
         }
 
+        private static void TrimManifest(ref Manifest m)
+        {
+            foreach (var link in m.Links.AsEnumerable())
+            {
+                link.URL = link.URL.Trim();
+            }
+        }
+
         internal static async Task<int> Main(string[] args)
         {
             var sw = new Stopwatch();
@@ -86,7 +94,7 @@ namespace ModlinksShaVerifier
             
             var serializer = new XmlSerializer(typeof(Manifest));
 
-            HashSet<Manifest> currentManifests = new();
+            Dictionary<string, Links> checkedLinks = new();
             
             while (await currentReader.ReadAsync())
             {
@@ -97,8 +105,8 @@ namespace ModlinksShaVerifier
                     continue;
 
                 var currentManifest = (Manifest?)serializer.Deserialize(currentReader) ?? throw new InvalidDataException();
-
-                currentManifests.Add(currentManifest);
+                TrimManifest(ref currentManifest);
+                checkedLinks.Add(currentManifest.Name, currentManifest.Links);
             }
             
             List<Task<bool>> checks = new();
@@ -112,15 +120,26 @@ namespace ModlinksShaVerifier
                     continue;
 
                 var incomingManifest = (Manifest?)serializer.Deserialize(incomingReader) ?? throw new InvalidDataException();
-                if (currentManifests.All(m => m.GetHashCode() != incomingManifest.GetHashCode()))
+                TrimManifest(ref incomingManifest);
+
+                if (checkedLinks.ContainsKey(incomingManifest.Name))
+                {
+                    if (checkedLinks[incomingManifest.Name] != incomingManifest.Links)
+                    {
+                        checks.Add(CheckSingleSha(incomingManifest));
+                    }
+                }
+                else
+                {
                     checks.Add(CheckSingleSha(incomingManifest));
-            }   
-            
+                }
+            }
+
             var res = await Task.WhenAll(checks);
 
             sw.Stop();
 
-            Console.WriteLine($"Completed in {sw.ElapsedMilliseconds}ms.");
+            Console.WriteLine($"Checked {checks.Count} mods in {sw.ElapsedMilliseconds}ms.");
 
             // If they're not all correct, error.
             return !res.All(x => x) ? 1 : 0;

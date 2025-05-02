@@ -38,32 +38,23 @@ public record Manifest
         set => _links = value;
     }
 
-    [XmlArray("Dependencies")]
-    [XmlArrayItem("Dependency")]
-    public string[]? Dependencies { get; set; }
-
-    public string Description { get; set; } = null!;
-
     public override string ToString()
     {
         return "{\n"
                + $"\t{nameof(Name)}: {Name},\n"
                + $"\t{nameof(Links)}: {(object?) _link ?? Links},\n"
-               + $"\t{nameof(Dependencies)}: {string.Join(", ", Dependencies ?? Array.Empty<string>())},\n"
-               + $"\t{nameof(Description)}: {Description}\n"
                + "}";
     }
 
     public override int GetHashCode()
     {
-        var hashCode = HashCode.Combine(Name, Description, Links);
-        return Dependencies?.Aggregate(hashCode, HashCode.Combine) ?? hashCode;
+        return HashCode.Combine(Name, Links);
     }
 }
 
 public record Links
 {
-    public Link? Windows;
+    public Link Windows = null!;
     public Link? Mac;
     public Link? Linux;
 
