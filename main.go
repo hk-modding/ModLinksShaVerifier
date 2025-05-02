@@ -26,14 +26,14 @@ func main() {
 	currentPath := args[1]
 	currentFile, err := os.Open(currentPath)
 	if err != nil {
-		log.Fatalln("Error opening current file: ", err)
+		log.Fatalln("Error opening current file:", err)
 	}
 	defer currentFile.Close()
 
 	incomingPath := args[2]
 	incomingFile, err := os.Open(incomingPath)
 	if err != nil {
-		log.Fatalln("Error opening incoming file: ", err)
+		log.Fatalln("Error opening incoming file:", err)
 	}
 	defer incomingFile.Close()
 
@@ -45,12 +45,12 @@ func main() {
 
 	err = xml.NewDecoder(currentReader).Decode(&currentModlinks)
 	if err != nil {
-		log.Fatalln("Error decoding current file: ", err)
+		log.Fatalln("Error decoding current file:", err)
 	}
 
 	err = xml.NewDecoder(incomingReader).Decode(&incomingModlinks)
 	if err != nil {
-		log.Fatalln("Error decoding incoming file: ", err)
+		log.Fatalln("Error decoding incoming file:", err)
 	}
 
 	mainChannel := make(chan bool)
@@ -150,7 +150,7 @@ func checkLink(manifestName string, link Link, channel chan bool) {
 
 	data, err := io.ReadAll(response.Body)
 	if err != nil {
-		fmt.Println("Error reading response body: ", err)
+		fmt.Println("Error reading response body:", err)
 		channel <- false
 		return
 	}
@@ -163,7 +163,7 @@ func checkLink(manifestName string, link Link, channel chan bool) {
 	if strings.EqualFold(hash, link.SHA256) {
 		channel <- true
 	} else {
-		fmt.Printf("Hash mismatch if %s in link %s. Expected value from modlinks: %s, Actual value: %s\n", manifestName, url, link.SHA256, hash)
+		fmt.Printf("Hash mismatch of %s in link %s. Expected value from modlinks: %s, Actual value: %s\n", manifestName, url, link.SHA256, hash)
 		channel <- false
 	}
 }
