@@ -90,7 +90,7 @@ func main() {
 		resultCount++
 	}
 
-	fmt.Printf("Completed in %dms\n", time.Since(start).Milliseconds())
+	fmt.Printf("Checked %d mods in %dms\n", resultCount, time.Since(start).Milliseconds())
 }
 
 func trimManifest(manifest *Manifest) {
