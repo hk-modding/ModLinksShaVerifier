@@ -20,14 +20,14 @@ func main() {
 	args := os.Args
 
 	if len(args) < 3 {
-		fmt.Print("Usage: go run main.go <currentPath> <incomingPath>")
+		fmt.Println("Usage: ./ModlinksShaVerifier <currentPath> <incomingPath>")
 		return
 	}
 
 	currentPath := args[1]
 	currentFile, err := os.Open(currentPath)
 	if err != nil {
-		fmt.Println("Error opening current file:", err)
+		fmt.Println("Error opening current file: ", err)
 		return
 	}
 	defer currentFile.Close()
@@ -35,7 +35,7 @@ func main() {
 	incomingPath := args[2]
 	incomingFile, err := os.Open(incomingPath)
 	if err != nil {
-		fmt.Println("Error opening incoming file:", err)
+		fmt.Println("Error opening incoming file: ", err)
 		return
 	}
 	defer incomingFile.Close()
@@ -135,17 +135,17 @@ func checkLink(manifestName string, link Link, channel chan bool) {
 	url := strings.TrimSpace(link.URL)
 	response, err := http.Get(url)
 	if err != nil {
-		fmt.Printf("Failed to fetch link at %s: %s", url, err)
+		fmt.Printf("Failed to fetch link at %s: %s\n", url, err)
 		channel <- false
 		return
 	} else if response.StatusCode != 200 {
-		fmt.Printf("Invalid status code %d", response.StatusCode)
+		fmt.Println("Invalid status code ", response.StatusCode)
 		return
 	}
 
 	data, err := io.ReadAll(response.Body)
 	if err != nil {
-		fmt.Printf("Error reading response body: %s", err)
+		fmt.Println("Error reading response body: ", err)
 		return
 	}
 	defer response.Body.Close()
@@ -157,7 +157,7 @@ func checkLink(manifestName string, link Link, channel chan bool) {
 	if strings.EqualFold(hash, link.SHA256) {
 		channel <- true
 	} else {
-		fmt.Printf("Hash mismatch if %s in link %s. Expected value from modlinks: %s, Actual value: %s", manifestName, url, link.SHA256, hash)
+		fmt.Printf("Hash mismatch if %s in link %s. Expected value from modlinks: %s, Actual value: %s\n", manifestName, url, link.SHA256, hash)
 		channel <- false
 	}
 }
