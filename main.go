@@ -20,23 +20,20 @@ func main() {
 	args := os.Args
 
 	if len(args) < 3 {
-		fmt.Println("Usage: ./ModlinksShaVerifier <currentPath> <incomingPath>")
-		return
+		log.Fatalln("Usage: ./ModlinksShaVerifier <currentPath> <incomingPath>")
 	}
 
 	currentPath := args[1]
 	currentFile, err := os.Open(currentPath)
 	if err != nil {
-		fmt.Println("Error opening current file: ", err)
-		return
+		log.Fatalln("Error opening current file: ", err)
 	}
 	defer currentFile.Close()
 
 	incomingPath := args[2]
 	incomingFile, err := os.Open(incomingPath)
 	if err != nil {
-		fmt.Println("Error opening incoming file: ", err)
-		return
+		log.Fatalln("Error opening incoming file: ", err)
 	}
 	defer incomingFile.Close()
 
@@ -48,14 +45,12 @@ func main() {
 
 	err = xml.NewDecoder(currentReader).Decode(&currentModlinks)
 	if err != nil {
-		fmt.Println("Error decoding current file: ", err)
-		return
+		log.Fatalln("Error decoding current file: ", err)
 	}
 
 	err = xml.NewDecoder(incomingReader).Decode(&incomingModlinks)
 	if err != nil {
-		fmt.Println("Error decoding incoming file: ", err)
-		return
+		log.Fatalln("Error decoding incoming file: ", err)
 	}
 
 	mainChannel := make(chan bool)
@@ -81,18 +76,25 @@ func main() {
 	}
 
 	var resultCount int
+	var success bool = true
 	for result := range mainChannel {
 		if !result {
-			log.Fatal("Not all checks were satisfied.")
-		} else if resultCount >= checkManifestCount {
+			success = false
+		}
+		if resultCount >= checkManifestCount {
 			break
 		}
 		resultCount++
 	}
 
+	if !success {
+		log.Fatalln("Not all checks were successful.")
+	}
+
 	fmt.Printf("Checked %d mods in %dms\n", resultCount, time.Since(start).Milliseconds())
 }
 
+// Trim any newlines existing in a mod manifest's link URLs.
 func trimManifest(manifest *Manifest) {
 	if manifest.Link != (Link{}) {
 		manifest.Link.URL = strings.TrimSpace(manifest.Link.URL)
@@ -109,6 +111,7 @@ func trimManifest(manifest *Manifest) {
 	}
 }
 
+// Verify the SHA256 hashes of a single mod manifest's links.
 func checkManifest(manifest Manifest, channel chan bool) {
 	fmt.Printf("Checking '%s'\n", manifest.Name)
 
@@ -131,6 +134,7 @@ func checkManifest(manifest Manifest, channel chan bool) {
 	}
 }
 
+// Verify the SHA256 hash of a single mod manifest link.
 func checkLink(manifestName string, link Link, channel chan bool) {
 	url := strings.TrimSpace(link.URL)
 	response, err := http.Get(url)
@@ -140,12 +144,14 @@ func checkLink(manifestName string, link Link, channel chan bool) {
 		return
 	} else if response.StatusCode != 200 {
 		fmt.Println("Invalid status code ", response.StatusCode)
+		channel <- false
 		return
 	}
 
 	data, err := io.ReadAll(response.Body)
 	if err != nil {
 		fmt.Println("Error reading response body: ", err)
+		channel <- false
 		return
 	}
 	defer response.Body.Close()
