@@ -94,7 +94,7 @@ namespace ModlinksShaVerifier
             
             var serializer = new XmlSerializer(typeof(Manifest));
 
-            Dictionary<string, Links> checkedLinks = new();
+            Dictionary<string, Links> checkedLinksDict = new();
             
             while (await currentReader.ReadAsync())
             {
@@ -106,7 +106,7 @@ namespace ModlinksShaVerifier
 
                 var currentManifest = (Manifest?)serializer.Deserialize(currentReader) ?? throw new InvalidDataException();
                 TrimManifest(ref currentManifest);
-                checkedLinks.Add(currentManifest.Name, currentManifest.Links);
+                checkedLinksDict.Add(currentManifest.Name, currentManifest.Links);
             }
             
             List<Task<bool>> checks = new();
@@ -122,9 +122,9 @@ namespace ModlinksShaVerifier
                 var incomingManifest = (Manifest?)serializer.Deserialize(incomingReader) ?? throw new InvalidDataException();
                 TrimManifest(ref incomingManifest);
 
-                if (checkedLinks.ContainsKey(incomingManifest.Name))
+                if (checkedLinksDict.TryGetValue(incomingManifest.Name, out var checkedLinks))
                 {
-                    if (checkedLinks[incomingManifest.Name] != incomingManifest.Links)
+                    if (checkedLinks != incomingManifest.Links)
                     {
                         checks.Add(CheckSingleSha(incomingManifest));
                     }
