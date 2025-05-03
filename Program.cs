@@ -53,14 +53,6 @@ namespace ModlinksShaVerifier
             return res.All(x => x);
         }
 
-        private static void TrimManifest(ref Manifest m)
-        {
-            foreach (var link in m.Links.AsEnumerable())
-            {
-                link.URL = link.URL.Trim();
-            }
-        }
-
         internal static async Task<int> Main(string[] args)
         {
             var sw = new Stopwatch();
@@ -101,11 +93,11 @@ namespace ModlinksShaVerifier
                 if (currentReader.NodeType != XmlNodeType.Element)
                     continue;
 
-                if (currentReader.Name != "Manifest")
+                if (currentReader.Name != nameof(Manifest))
                     continue;
 
                 var currentManifest = (Manifest?)serializer.Deserialize(currentReader) ?? throw new InvalidDataException();
-                TrimManifest(ref currentManifest);
+                currentManifest.Name ??= nameof(ApiLinks);
                 checkedLinksDict.Add(currentManifest.Name, currentManifest.Links);
             }
             
@@ -116,12 +108,11 @@ namespace ModlinksShaVerifier
                 if (incomingReader.NodeType != XmlNodeType.Element)
                     continue;
 
-                if (incomingReader.Name != "Manifest")
+                if (incomingReader.Name != nameof(Manifest))
                     continue;
 
                 var incomingManifest = (Manifest?)serializer.Deserialize(incomingReader) ?? throw new InvalidDataException();
-                TrimManifest(ref incomingManifest);
-
+                incomingManifest.Name ??= nameof(ApiLinks);
                 if (checkedLinksDict.TryGetValue(incomingManifest.Name, out var checkedLinks))
                 {
                     if (checkedLinks != incomingManifest.Links)
@@ -139,7 +130,7 @@ namespace ModlinksShaVerifier
 
             sw.Stop();
 
-            Console.WriteLine($"Checked {checks.Count} mods in {sw.ElapsedMilliseconds}ms.");
+            Console.WriteLine($"Checked {checks.Count} manifests in {sw.ElapsedMilliseconds}ms.");
 
             // If they're not all correct, error.
             return !res.All(x => x) ? 1 : 0;

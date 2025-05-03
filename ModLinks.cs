@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Xml;
+using System.Xml.Schema;
 using System.Xml.Serialization;
 
 namespace ModlinksShaVerifier;
@@ -19,7 +21,7 @@ public record Manifest
     private Links? _links;
     private Link? _link;
 
-    public string Name { get; set; } = null!;
+    public string? Name { get; set; }
 
     [XmlElement]
     public Link? Link
@@ -44,11 +46,6 @@ public record Manifest
                + $"\t{nameof(Name)}: {Name},\n"
                + $"\t{nameof(Links)}: {(object?) _link ?? Links},\n"
                + "}";
-    }
-
-    public override int GetHashCode()
-    {
-        return HashCode.Combine(Name, Links);
     }
 }
 
@@ -78,7 +75,7 @@ public record Links
     }
 }
 
-public record Link
+public record Link : IXmlSerializable
 {
     [XmlAttribute]
     public string SHA256 = null!;
@@ -89,6 +86,19 @@ public record Link
     public override string ToString()
     {
         return $"[Link: {nameof(SHA256)} = {SHA256}, {nameof(URL)}: {URL}]";
+    }
+    
+    public XmlSchema? GetSchema() => null;
+
+    public void ReadXml(XmlReader reader)
+    {
+        var sha256 = reader.GetAttribute(nameof(SHA256));
+        SHA256 = sha256 ?? throw new InvalidDataException("SHA256 attribute not found");
+        URL = reader.ReadElementContentAsString().Trim();
+    }
+
+    public void WriteXml(XmlWriter writer)
+    {
     }
 }
 
