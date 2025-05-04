@@ -9,7 +9,8 @@ namespace ModlinksShaVerifier;
 
 public static class SerializationConstants
 {
-    public const string Namespace = "https://github.com/HollowKnight-Modding/HollowKnight.ModLinks/HollowKnight.ModManager";
+    public const string Namespace =
+        "https://github.com/HollowKnight-Modding/HollowKnight.ModLinks/HollowKnight.ModManager";
 }
 
 [Serializable]
@@ -32,11 +33,7 @@ public record Manifest
 
     public Links Links
     {
-        get =>
-            _links ??= new Links
-            {
-                Windows = _link ?? throw new InvalidDataException(nameof(_link))
-            };
+        get => _links ??= new Links { Windows = _link ?? throw new InvalidDataException(nameof(_link)) };
         set => _links = value;
     }
 
@@ -66,8 +63,8 @@ public record Links
 
     public IEnumerable<Link> AsEnumerable()
     {
-        if (Windows is not null)
-            yield return Windows;
+        yield return Windows;
+
         if (Mac is not null)
             yield return Mac;
         if (Linux is not null)
@@ -87,13 +84,12 @@ public record Link : IXmlSerializable
     {
         return $"[Link: {nameof(SHA256)} = {SHA256}, {nameof(URL)}: {URL}]";
     }
-    
+
     public XmlSchema? GetSchema() => null;
 
     public void ReadXml(XmlReader reader)
     {
-        var sha256 = reader.GetAttribute(nameof(SHA256));
-        SHA256 = sha256 ?? throw new InvalidDataException("SHA256 attribute not found");
+        SHA256 = reader.GetAttribute(nameof(SHA256)) ?? throw new InvalidDataException("Missing SHA256 attribute!");
         URL = reader.ReadElementContentAsString().Trim();
     }
 

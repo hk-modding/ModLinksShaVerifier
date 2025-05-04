@@ -13,10 +13,12 @@ namespace ModlinksShaVerifier
 {
     internal static class Program
     {
-        private static readonly HttpClient _Client = new(new HttpClientHandler
-        {
-            MaxConnectionsPerServer = 16,
-        });
+        private static readonly HttpClient _Client = new(
+            new HttpClientHandler
+            {
+                MaxConnectionsPerServer = 16,
+            }
+        );
 
         private static async Task<bool> CheckLink(Manifest m, Link link)
         {
@@ -25,22 +27,27 @@ namespace ModlinksShaVerifier
             try
             {
                 await using Stream stream = await _Client.GetStreamAsync(link.URL);
-                
+
                 var sw = new Stopwatch();
                 sw.Start();
+                
                 string shasum = Convert.ToHexString(await sha.ComputeHashAsync(stream));
+                
                 Console.WriteLine($"Took {sw.Elapsed.ToString()} to calc sum for {m.Name}");
 
                 if (shasum.Equals(link.SHA256, StringComparison.InvariantCultureIgnoreCase))
                     return true;
-                    
-                WriteError("Check", $"Hash mismatch of {m.Name} in link {link.URL}. Expected value from modlinks: {link.SHA256}, Actual value: {shasum}");
+
+                WriteError(
+                    "Check",
+                    $"Hash mismatch of {m.Name} in link {link.URL}. Expected value from modlinks: {link.SHA256}, Actual value: {shasum}"
+                );
             }
             catch (HttpRequestException e)
             {
                 WriteError("Check", $"Request failed for {m.Name} - {link.URL}! {e.StatusCode}");
             }
-            
+
             return false;
         }
 
@@ -86,14 +93,12 @@ namespace ModlinksShaVerifier
                 return 1;
             }
 
-
             if (!File.Exists(currPath))
             {
-                await Console.Error.WriteLineAsync(
-                    $"Unable to access new XML file {currPath}! Does it exist?");
+                await Console.Error.WriteLineAsync($"Unable to access new XML file {currPath}! Does it exist?");
                 return 1;
             }
-            
+
             var serializer = new XmlSerializer(typeof(Manifest));
 
             Dictionary<string, Links> prev = new();
@@ -116,7 +121,7 @@ namespace ModlinksShaVerifier
                         checks.Add(CheckSingleSha(m));
                 }
             );
-            
+
             var res = await Task.WhenAll(checks);
 
             sw.Stop();
