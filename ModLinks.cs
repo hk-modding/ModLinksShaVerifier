@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Xml;
 using System.Xml.Schema;
 using System.Xml.Serialization;
@@ -22,7 +21,7 @@ public record Manifest
     private Link? _link;
 
     // The name is required on all manifests *except* for ApiLinks, so default to it.
-    public string Name { get; set; } = nameof(ApiLinks);
+    public string Name { get; set; } = "ApiLinks";
 
     [XmlElement]
     public Link? Link
@@ -100,34 +99,5 @@ public record Link : IXmlSerializable
 
     public void WriteXml(XmlWriter writer)
     {
-    }
-}
-
-[Serializable]
-public class ApiManifest
-{
-    public Links Links { get; set; }
-
-    // For serializer and nullability
-    public ApiManifest() => Links = null!;
-}
-
-[XmlRoot(Namespace = SerializationConstants.Namespace)]
-public class ApiLinks
-{
-    public ApiManifest Manifest { get; set; } = null!;
-}
-
-[XmlRoot(Namespace = SerializationConstants.Namespace)]
-public class ModLinks
-{
-    [XmlElement("Manifest")]
-    public Manifest[] Manifests { get; set; } = null!;
-
-    public override string ToString()
-    {
-        return "ModLinks {[\n"
-               + string.Join("\n", Manifests.Select(x => x.ToString()))
-               + "]}";
     }
 }
