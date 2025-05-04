@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Xml;
 using System.Xml.Schema;
 using System.Xml.Serialization;
@@ -33,7 +32,7 @@ public record Manifest
 
     public Links Links
     {
-        get => _links ??= new Links { Windows = _link ?? throw new InvalidDataException(nameof(_link)) };
+        get => _links ??= new Links { Windows = _link ?? throw new InvalidOperationException("Object missing links!") };
         set => _links = value;
     }
 
@@ -89,7 +88,7 @@ public record Link : IXmlSerializable
 
     public void ReadXml(XmlReader reader)
     {
-        SHA256 = reader.GetAttribute(nameof(SHA256)) ?? throw new InvalidDataException("Missing SHA256 attribute!");
+        SHA256 = reader.GetAttribute(nameof(SHA256)) ?? throw new XmlException("Missing SHA256 attribute!");
         URL = reader.ReadElementContentAsString().Trim();
     }
 

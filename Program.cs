@@ -72,7 +72,7 @@ namespace ModlinksShaVerifier
                 if (reader.Name is not nameof(Manifest))
                     continue;
 
-                f(s.Deserialize(reader) as Manifest ?? throw new InvalidDataException());
+                f(s.Deserialize(reader) as Manifest ?? throw new XmlException("Unable to deserialize manifest!"));
             }
         }
 
