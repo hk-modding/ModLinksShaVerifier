@@ -39,7 +39,6 @@ namespace ModlinksShaVerifier
             catch (HttpRequestException e)
             {
                 WriteError("Check", $"Request failed for {m.Name} - {link.URL}! {e.StatusCode}");
-                return false;
             }
             
             return false;
@@ -59,72 +58,61 @@ namespace ModlinksShaVerifier
             var sw = new Stopwatch();
             sw.Start();
 
-            if (args.Length != 2)
+            if (args is not [var prevPath, var currPath])
             {
                 await Console.Error.WriteLineAsync("Usage: ModlinksShaVerifier [CURRENT_FILE] [INCOMING_FILE]");
                 return 1;
             }
 
-            string currentPath = args[0];
-
-            if (!File.Exists(currentPath))
+            if (!File.Exists(prevPath))
             {
-                await Console.Error.WriteLineAsync($"Unable to access current XML file {currentPath}! Does it exist?");
+                await Console.Error.WriteLineAsync($"Unable to access previous XML file {prevPath}! Does it exist?");
                 return 1;
             }
 
-            var incomingPath = args[1];
 
-            if (!File.Exists(incomingPath))
+            if (!File.Exists(currPath))
             {
                 await Console.Error.WriteLineAsync(
-                    $"Unable to access incoming XML file {incomingPath}! Does it exist?");
+                    $"Unable to access new XML file {currPath}! Does it exist?");
                 return 1;
             }
             
-            var currentReader = XmlReader.Create(currentPath, new XmlReaderSettings { Async = true });
-            var incomingReader = XmlReader.Create(incomingPath, new XmlReaderSettings { Async = true });
+            var prev = XmlReader.Create(prevPath, new XmlReaderSettings { Async = true });
+            var curr = XmlReader.Create(currPath, new XmlReaderSettings { Async = true });
             
             var serializer = new XmlSerializer(typeof(Manifest));
 
             Dictionary<string, Links> checkedLinksDict = new();
             
-            while (await currentReader.ReadAsync())
+            while (await prev.ReadAsync())
             {
-                if (currentReader.NodeType != XmlNodeType.Element)
+                if (prev.NodeType != XmlNodeType.Element)
                     continue;
 
-                if (currentReader.Name != nameof(Manifest))
+                if (prev.Name != nameof(Manifest))
                     continue;
 
-                var currentManifest = (Manifest?)serializer.Deserialize(currentReader) ?? throw new InvalidDataException();
+                var currentManifest = (Manifest?) serializer.Deserialize(prev) ?? throw new InvalidDataException();
                 currentManifest.Name ??= nameof(ApiLinks);
                 checkedLinksDict.Add(currentManifest.Name, currentManifest.Links);
             }
             
             List<Task<bool>> checks = new();
             
-            while (await incomingReader.ReadAsync())
+            while (await curr.ReadAsync())
             {
-                if (incomingReader.NodeType != XmlNodeType.Element)
+                if (curr.NodeType != XmlNodeType.Element)
                     continue;
 
-                if (incomingReader.Name != nameof(Manifest))
+                if (curr.Name != nameof(Manifest))
                     continue;
 
-                var incomingManifest = (Manifest?)serializer.Deserialize(incomingReader) ?? throw new InvalidDataException();
+                var incomingManifest = (Manifest?) serializer.Deserialize(curr) ?? throw new InvalidDataException();
                 incomingManifest.Name ??= nameof(ApiLinks);
-                if (checkedLinksDict.TryGetValue(incomingManifest.Name, out var checkedLinks))
-                {
-                    if (checkedLinks != incomingManifest.Links)
-                    {
-                        checks.Add(CheckSingleSha(incomingManifest));
-                    }
-                }
-                else
-                {
+                
+                if (!checkedLinksDict.TryGetValue(incomingManifest.Name, out var checkedLinks) || checkedLinks != incomingManifest.Links)
                     checks.Add(CheckSingleSha(incomingManifest));
-                }
             }
             
             var res = await Task.WhenAll(checks);
