@@ -21,7 +21,8 @@ public record Manifest
     private Links? _links;
     private Link? _link;
 
-    public string? Name { get; set; }
+    // The name is required on all manifests *except* for ApiLinks, so default to it.
+    public string Name { get; set; } = nameof(ApiLinks);
 
     [XmlElement]
     public Link? Link

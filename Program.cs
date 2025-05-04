@@ -53,6 +53,22 @@ namespace ModlinksShaVerifier
             return res.All(x => x);
         }
 
+        private static async Task ReadManifests(string path, XmlSerializer s, Action<Manifest> f)
+        {
+            using var reader = XmlReader.Create(path, new XmlReaderSettings { Async = true });
+
+            while (await reader.ReadAsync())
+            {
+                if (reader.NodeType is not XmlNodeType.Element)
+                    continue;
+
+                if (reader.Name is not nameof(Manifest))
+                    continue;
+
+                f(s.Deserialize(reader) as Manifest ?? throw new InvalidDataException());
+            }
+        }
+
         internal static async Task<int> Main(string[] args)
         {
             var sw = new Stopwatch();
@@ -78,42 +94,28 @@ namespace ModlinksShaVerifier
                 return 1;
             }
             
-            var prev = XmlReader.Create(prevPath, new XmlReaderSettings { Async = true });
-            var curr = XmlReader.Create(currPath, new XmlReaderSettings { Async = true });
-            
             var serializer = new XmlSerializer(typeof(Manifest));
 
-            Dictionary<string, Links> checkedLinksDict = new();
-            
-            while (await prev.ReadAsync())
-            {
-                if (prev.NodeType != XmlNodeType.Element)
-                    continue;
+            Dictionary<string, Links> prev = new();
 
-                if (prev.Name != nameof(Manifest))
-                    continue;
+            await ReadManifests(
+                prevPath,
+                serializer,
+                m => prev.Add(m.Name, m.Links)
+            );
 
-                var currentManifest = (Manifest?) serializer.Deserialize(prev) ?? throw new InvalidDataException();
-                currentManifest.Name ??= nameof(ApiLinks);
-                checkedLinksDict.Add(currentManifest.Name, currentManifest.Links);
-            }
-            
-            List<Task<bool>> checks = new();
-            
-            while (await curr.ReadAsync())
-            {
-                if (curr.NodeType != XmlNodeType.Element)
-                    continue;
+            List<Task<bool>> checks = [];
 
-                if (curr.Name != nameof(Manifest))
-                    continue;
-
-                var incomingManifest = (Manifest?) serializer.Deserialize(curr) ?? throw new InvalidDataException();
-                incomingManifest.Name ??= nameof(ApiLinks);
-                
-                if (!checkedLinksDict.TryGetValue(incomingManifest.Name, out var checkedLinks) || checkedLinks != incomingManifest.Links)
-                    checks.Add(CheckSingleSha(incomingManifest));
-            }
+            await ReadManifests(
+                currPath,
+                serializer,
+                m =>
+                {
+                    // Check the manifest if it either wasn't present before *or* its contents changed.
+                    if (!prev.TryGetValue(m.Name, out Links? links) || links != m.Links)
+                        checks.Add(CheckSingleSha(m));
+                }
+            );
             
             var res = await Task.WhenAll(checks);
 
