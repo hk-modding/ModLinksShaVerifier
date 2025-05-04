@@ -13,34 +13,35 @@ namespace ModlinksShaVerifier
 {
     internal static class Program
     {
-        private static readonly HttpClient _Client = new();
-
-        private static string ShaToString(byte[] hash)
-            => BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+        private static readonly HttpClient _Client = new(new HttpClientHandler
+        {
+            MaxConnectionsPerServer = 16,
+        });
 
         private static async Task<bool> CheckLink(Manifest m, Link link)
         {
             using var sha = SHA256.Create();
 
-            Stream stream;
-
             try
             {
-                stream = await _Client.GetStreamAsync(link.URL);
+                await using Stream stream = await _Client.GetStreamAsync(link.URL);
+                
+                var sw = new Stopwatch();
+                sw.Start();
+                string shasum = Convert.ToHexString(await sha.ComputeHashAsync(stream));
+                Console.WriteLine($"Took {sw.Elapsed.ToString()} to calc sum for {m.Name}");
+
+                if (shasum.Equals(link.SHA256, StringComparison.InvariantCultureIgnoreCase))
+                    return true;
+                    
+                WriteError("Check", $"Hash mismatch of {m.Name} in link {link.URL}. Expected value from modlinks: {link.SHA256}, Actual value: {shasum}");
             }
             catch (HttpRequestException e)
             {
                 WriteError("Check", $"Request failed for {m.Name} - {link.URL}! {e.StatusCode}");
                 return false;
             }
-
-            string shasum = ShaToString(await sha.ComputeHashAsync(stream));
-
-            if (shasum == link.SHA256.ToLowerInvariant())
-                return true;
-
-            WriteError("Check", $"Hash mismatch of {m.Name} in link {link.URL}. Expected value from modlinks: {link.SHA256}, Actual value: {shasum}");
-
+            
             return false;
         }
 
@@ -125,7 +126,7 @@ namespace ModlinksShaVerifier
                     checks.Add(CheckSingleSha(incomingManifest));
                 }
             }
-
+            
             var res = await Task.WhenAll(checks);
 
             sw.Stop();
