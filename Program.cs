@@ -84,19 +84,19 @@ namespace ModlinksShaVerifier
             if (args is not [var prevPath, var currPath])
             {
                 await Console.Error.WriteLineAsync("Usage: ModlinksShaVerifier [CURRENT_FILE] [INCOMING_FILE]");
-                return 1;
+                return 2;
             }
 
             if (!File.Exists(prevPath))
             {
                 await Console.Error.WriteLineAsync($"Unable to access previous XML file {prevPath}! Does it exist?");
-                return 1;
+                return 2;
             }
 
             if (!File.Exists(currPath))
             {
                 await Console.Error.WriteLineAsync($"Unable to access new XML file {currPath}! Does it exist?");
-                return 1;
+                return 2;
             }
 
             var serializer = new XmlSerializer(typeof(Manifest));
